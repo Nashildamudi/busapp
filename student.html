@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Student Bus Tracker</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f4f4f9;
+        }
+        #map {
+            width: 90%;
+            height: 500px;
+            margin: 20px auto;
+            border-radius: 10px;
+        }
+        #status {
+            font-size: 18px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <h1>Live Bus Tracker</h1>
+    <div id="map"></div>
+    <p id="status">Loading...</p>
+
+    <script type="module">
+        // 1. Import Supabase
+        import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+        // 2. Initialize Supabase
+        const supabaseUrl = "https://hhyfkuwwkhjbekflekie.supabase.co";
+        const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhoeWZrdXd3a2hqYmVrZmxla2llIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAwMTk3MDEsImV4cCI6MjA1NTU5NTcwMX0.AxEx2nG9X4Yh2ihxaM0TJE05FeXsKjcteNWi-dDq3pM";
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // 3. Initialize Map (OpenStreetMap - Leaflet.js)
+        let map = L.map('map').setView([12.9716, 77.5946], 14); // Default Bangalore
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        let busMarker = L.marker([12.9716, 77.5946]).addTo(map); // Default marker
+
+        // 4. Function to get latest driver location
+        async function getDriverLocation() {
+            const { data, error } = await supabase
+                .from('bus_location')
+                .select('*')
+                .order('updated_at', { ascending: false })
+                .limit(1);
+
+            if (error) {
+                console.error("Error fetching location:", error);
+                return;
+            }
+
+            if (data.length > 0) {
+                const { lat, lng } = data[0];
+                console.log("Driver Location:", lat, lng);
+                updateMap(lat, lng);
+            }
+        }
+
+        // 5. Realtime Listener for location updates
+        supabase
+            .channel('bus_location')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bus_location' }, (payload) => {
+                console.log("Location Updated:", payload.new);
+                updateMap(payload.new.lat, payload.new.lng);
+            })
+            .subscribe();
+
+        // 6. Function to update map
+        function updateMap(lat, lng) {
+            busMarker.setLatLng([lat, lng]); // Move marker to new location
+            map.setView([lat, lng], 14); // Center map to new location
+            document.getElementById('status').innerText = `Bus is at: ${lat}, ${lng}`;
+        }
+
+        // 7. Initial Fetch
+        getDriverLocation();
+    </script>
+</body>
+</html>
